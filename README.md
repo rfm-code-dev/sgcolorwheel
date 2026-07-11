@@ -1,2 +1,2 @@
-# sgcolorharmony
-A tool to pick  sega genesis colors palettes for use in SGDK.
+# sgcolorwheel
+A tool to pick Sega Genesis colors palettes for use in SGDK and Retro Games.
