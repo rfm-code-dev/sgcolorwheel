@@ -58,7 +58,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 st.sidebar.caption("Adjust hardware color channels directly from index 0 to 7.")
 
-# Get initial values to build the real-time preview box (Requirement #1)
 vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=0)
 vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value=6)
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
@@ -66,11 +65,11 @@ vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
 base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
 
-# Requirement #1: Dynamic preview box showing the hardware selection above sliders
+# FIX: Dynamic key forces the preview color box to update instantly when sliders move
 st.sidebar.markdown("**Selected Base Preview:**")
-st.sidebar.color_picker("Hardware Base Color", base_hex, key="sidebar_base_preview", disabled=True)
+st.sidebar.color_picker("Hardware Base Color", base_hex, key=f"sb_preview_{base_hex.replace('#', '')}", disabled=True)
 
-# Extract brightness/value context dynamically for global synchronization
+# Extract brightness context
 r_norm, g_norm, b_norm = base_genesis[0]/255.0, base_genesis[1]/255.0, base_genesis[2]/255.0
 _, _, dynamic_value = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
 
@@ -141,18 +140,18 @@ with col_wheel:
     
     fig, ax = plt.subplots(figsize=(4.5, 4.5), subplot_kw=dict(projection='polar'))
     
-    # Generate background elements safely
-    angles_bg = np.linspace(0, 2 * np.pi, 72, endpoint=False)
-    radii_bg = np.linspace(0.1, 1.0, 8)
+    # RECALIBRATION: Expanded grid resolution
+    angles_bg = np.linspace(0, 2 * np.pi, 96, endpoint=False)
+    # Using square root distribution to cluster background dots evenly toward the edge
+    radii_bg = np.sqrt(np.linspace(0.04, 1.0, 10))
     
     for a in angles_bg:
         for r_g in radii_bg:
             r_res, g_res, b_res = colorsys.hsv_to_rgb(a / (2 * np.pi), r_g, max(0.2, dynamic_value))
             q_r, q_g, q_b = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
             
-            # Fix Requirement #1 & #3 bug: Exponential sizing curve prevents tight center overlaps or node ballooning
-            scatter_size = 4 + (r_g ** 2) * 55
-            ax.scatter(a, r_g, color=f"#{q_r:02X}{q_g:02X}{q_b:02X}", s=scatter_size, alpha=0.9, linewidths=0)
+            # Uniform sizing across the whole grid now that geometric distribution matches density
+            ax.scatter(a, r_g, color=f"#{q_r:02X}{q_g:02X}{q_b:02X}", s=35, alpha=0.9, linewidths=0)
             
     # Overlay lines and harmony nodes
     for idx, color in enumerate(palette):
@@ -165,11 +164,10 @@ with col_wheel:
         ax.plot([0, rad_angle], [0, s], color="white", linestyle="--", alpha=0.8, linewidth=1.5)
         node_border = "#000000" if v > 0.5 else "#FFFFFF"
         
-        # Hardcoded size to protect overlay nodes from color-state bugs
         ax.scatter(
             rad_angle, s, 
             color=f"#{r_int:02X}{g_int:02X}{b_int:02X}", 
-            edgecolor=node_border, s=200, zorder=10
+            edgecolor=node_border, s=180, zorder=10
         )
         
     ax.set_yticklabels([])
