@@ -9,6 +9,22 @@ st.set_page_config(page_title="Sega Genesis / Mega Drive Color Wheel", page_icon
 st.title("🎮 Sega Genesis / Mega Drive Color Wheel")
 st.markdown("Create and calculate color harmonies locked strictly to the **512 colors (9-bit VDP RGB)** of the original hardware.")
 
+# --- INJECT CUSTOM CSS TO REMOVE ROLLOVER AND CLICKS FROM PREVIEW BOXES ---
+# This keeps the blocks 100% bright but completely unclickable and without pointer changes.
+st.markdown("""
+    <style>
+        /* Target color pickers that act as previews and disable mouse interactions */
+        div[data-testid="stColorPicker"] {
+            pointer-events: none !important;
+            cursor: default !important;
+        }
+        /* Keep sidebar picker active so the user can still use sliders or the sidebar preview if needed */
+        section[data-testid="stSidebar"] div[data-testid="stColorPicker"] {
+            pointer-events: auto !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- HARDWARE TECHNICAL CONSTANTS ---
 VDP_STEPS = (0, 36, 73, 109, 146, 182, 219, 255)
 
@@ -67,12 +83,10 @@ vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
-
-# CRITICAL FIX: Explicitly extraction of indices to output the exact 24-bit color on preview
 base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
 
 st.sidebar.markdown("**Selected Base Preview:**")
-st.sidebar.color_picker("Hardware Base Color", base_hex, key=f"sb_preview_{base_hex.replace('#', '')}", disabled=True)
+st.sidebar.color_picker("Hardware Base Color", base_hex, key=f"sb_preview_{base_hex.replace('#', '')}")
 
 # Extract brightness context
 r_norm, g_norm, b_norm = base_genesis[0]/255.0, base_genesis[1]/255.0, base_genesis[2]/255.0
@@ -182,11 +196,10 @@ with col_values:
     
     for i, color in enumerate(palette):
         with cols_palette[i]:
-            # CRITICAL FIX: Expanded indices color[0], color[1], color[2] to display precise brick brightness
             hex_color = f"#{color[0]:02X}{color[1]:02X}{color[2]:02X}"
             label_title = f"⭐ Base Color" if color == base_genesis and i == 2 else f"Color {i+1}"
             
-            st.color_picker(label_title, hex_color, key=f"vdp_node_{i}_{hex_color.replace('#', '')}", disabled=True)
+            st.color_picker(label_title, hex_color, key=f"vdp_node_{i}_{hex_color.replace('#', '')}")
             st.markdown(f"**SGDK:** `{rgb_to_sgdk_hex(color)}`")
             st.caption(f"RGB: {color}")
             
@@ -210,9 +223,8 @@ for i in range(16):
         st.markdown(f"<center><b>Slot {i}</b></center>", unsafe_allow_html=True)
         if i < len(st.session_state.custom_palette):
             slot_color = st.session_state.custom_palette[i]
-            # CRITICAL FIX: Expanded precise tuple array channels to fix slot active layout brightness
             slot_hex = f"#{slot_color[0]:02X}{slot_color[1]:02X}{slot_color[2]:02X}"
-            st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", disabled=True, label_visibility="collapsed")
+            st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
             st.caption(f"<center><code>{rgb_to_sgdk_hex(slot_color)}</code></center>", unsafe_allow_html=True)
         else:
             st.color_picker(f"S{i}", "#222222", key=f"slot_box_empty_{i}", disabled=True, label_visibility="collapsed")
