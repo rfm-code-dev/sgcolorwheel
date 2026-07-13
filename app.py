@@ -59,9 +59,9 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- INITIALIZE SESSION STATE FOR THE 16-COLOR PALETTE ---
+# --- INITIALIZE PALETTE ARRAY SLOTS AS FIXED 16 ELEMENT LIST ---
 if "custom_palette" not in st.session_state:
-    st.session_state.custom_palette = []
+    st.session_state.custom_palette = [None] * 16
 
 # --- SIDEBAR CONFIGURATION ---
 st.sidebar.header("🕹️ Harmony Panel")
@@ -148,15 +148,16 @@ elif harmony_rule == "Compound":
     ]
 
 # --- MAIN INTERFACE LAYOUT ---
-# CORREÇÃO 3: Ajustado a proporção das colunas de [1, 1.2] para [0.8, 1.4] para deixar a roda menor na tela
 col_wheel, col_values = st.columns([0.8, 1.4])
 
 with col_wheel:
     st.write("### VDP 9-bit Color Wheel")
-    
     fig, ax = plt.subplots(figsize=(3.2, 3.2), subplot_kw=dict(projection='polar'))
     
-    # CORREÇÃO 2: np.linspace garante anéis perfeitamente equidistantes e simétricos do centro à borda
+    # FIXED: Scale constraints locked down completely to disable dynamic resizing bugs
+    ax.set_autoscale_on(False)
+    ax.set_rmax(1.0)
+    
     angles_bg = np.linspace(0, 2 * np.pi, 64, endpoint=False)
     radii_bg = np.linspace(0.08, 1.0, 10)
     
@@ -164,11 +165,8 @@ with col_wheel:
         for r_g in radii_bg:
             r_res, g_res, b_res = colorsys.hsv_to_rgb(a / (2 * np.pi), r_g, max(0.0, dynamic_value))
             q_r, q_g, q_b = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
-            
-            # Mantendo os pontos de fundo pequenos fixos (s=15)
             ax.scatter(a, r_g, color=f"#{q_r:02X}{q_g:02X}{q_b:02X}", s=15, alpha=0.9, linewidths=0, zorder=1)
             
-    # Overlay lines and harmony nodes
     for idx, color in enumerate(palette):
         r_v, g_v, b_v = int(color[0]), int(color[1]), int(color[2])
         r_n, g_n, b_n = r_v / 255.0, g_v / 255.0, b_v / 255.0
@@ -176,11 +174,9 @@ with col_wheel:
         rad_angle = h * 2 * np.pi
         s_plot = max(0.02, s)
         
-        # CORREÇÃO 4: Espessura da linha tracejada reduzida de 1.5 para 0.8 (mais fina)
         ax.plot([0, rad_angle], [0, s_plot], color="white", linestyle="--", alpha=0.8, linewidth=0.8, zorder=5)
         node_border = "#000000" if v > 0.5 else "#FFFFFF"
         
-        # CORREÇÃO 4: Espessura da borda da bolinha (linewidths) reduzida de 2.0 para 1.0 e s=100 (menor)
         ax.scatter(
             rad_angle, s_plot, 
             color=f"#{r_v:02X}{g_v:02X}{b_v:02X}", 
@@ -189,10 +185,6 @@ with col_wheel:
         
     ax.set_yticklabels([])
     ax.set_xticklabels([])
-    
-    # CORREÇÃO 1: Trava absoluta do limite do raio para impedir o zoom automático (Fim do bug de bolas gigantes)
-    ax.set_rmax(1.0)
-    
     ax.grid(False)
     fig.patch.set_facecolor('none')
     ax.set_facecolor('none')
@@ -212,59 +204,85 @@ with col_values:
             st.caption(f"RGB: {color}")
             
             if st.button("➕ Add", key=f"add_btn_{i}_{hex_color.replace('#', '')}"):
-                if len(st.session_state.custom_palette) < 16:
-                    if color not in st.session_state.custom_palette:
-                        st.session_state.custom_palette.append(color)
-                    else:
-                        st.sidebar.warning("Color already in palette!")
+                # Find the first empty slot to automatically insert the color
+                inserted = False
+                for s_idx in range(16):
+                    if st.session_state.custom_palette[s_idx] is None:
+                        st.session_state.custom_palette[s_idx] = color
+                        inserted = True
+                        break
+                if inserted:
+                    st.rerun()
                 else:
-                    st.sidebar.error("Palette is full! (Max 16 colors)")
+                    st.sidebar.error("All 16 slots are full!")
 
 # --- 16-COLOR PALETTE BUILDER WORKSPACE ---
 st.markdown("---")
 st.write("### 🎛️ Active 16-Color Hardware Palette Builder")
-st.caption(f"Slots filled: {len(st.session_state.custom_palette)} / 16. (Note: Index 0 is background transparency in Sega VDP hardware mapping).")
+
+# Calculate accurate slots filled count filtering out None placeholders
+active_colors = [c for c in st.session_state.custom_palette if c is not None]
+st.caption(f"Slots filled: {len(active_colors)} / 16. (Move elements using the index slider or clear individual slots using the X button).")
 
 cols_16 = st.columns(16)
 for i in range(16):
     with cols_16[i]:
         st.markdown(f"<center><b>Slot {i}</b></center>", unsafe_allow_html=True)
-        if i < len(st.session_state.custom_palette):
-            slot_color = st.session_state.custom_palette[i]
-            slot_hex = f"#{slot_color[0]:02X}{slot_color[1]:02X}{slot_color[2]:02X}"
+        slot_data = st.session_state.custom_palette[i]
+        
+        if slot_data is not None:
+            slot_hex = f"#{slot_data[0]:02X}{slot_data[1]:02X}{slot_data[2]:02X}"
             st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
-            st.caption(f"<center><code>{rgb_to_sgdk_hex(slot_color)}</code></center>", unsafe_allow_html=True)
+            st.caption(f"<center><code>{rgb_to_sgdk_hex(slot_data)}</code></center>", unsafe_allow_html=True)
+            
+            # 1. Sliders to swap colors between quadrants
+            move_target = st.slider("Move", min_value=0, max_value=15, value=i, key=f"move_slider_{i}", label_visibility="collapsed")
+            if move_target != i:
+                # Swap the colors between indices in the array matrix memory
+                temp = st.session_state.custom_palette[move_target]
+                st.session_state.custom_palette[move_target] = st.session_state.custom_palette[i]
+                st.session_state.custom_palette[i] = temp
+                st.rerun()
+                
+            # 2. X Button to clear an individual slot safely
+            if st.button("❌", key=f"clear_slot_btn_{i}", help="Clear color from this slot"):
+                st.session_state.custom_palette[i] = None
+                st.rerun()
         else:
             st.color_picker(f"S{i}", "#222222", key=f"slot_box_empty_{i}", disabled=True, label_visibility="collapsed")
             st.caption("<center><code style='color:gray;'>0x----</code></center>", unsafe_allow_html=True)
+            st.markdown("<br><br>", unsafe_allow_html=True)  # Keeps whitespace aligned nicely with sliders
 
-if st.session_state.custom_palette:
-    if st.button("❌ Clear Palette Workspace", type="secondary"):
-        st.session_state.custom_palette = []
+if any(c is not None for c in st.session_state.custom_palette):
+    if st.button("❌ Clear Full Palette", type="secondary"):
+        st.session_state.custom_palette = [None] * 16
         st.rerun()
 
 # --- CODE EXPORT BLOCK ---
-if st.session_state.custom_palette:
+exportable_palette = [c for c in st.session_state.custom_palette if c is not None]
+
+if exportable_palette:
     st.markdown("---")
     st.write("### 💻 Export Code for Your Project Palette")
-    st.caption("This code updates dynamically based only on the colors you successfully added to the builder above.")
+    st.caption("This code updates dynamically containing only the active valid colors from your 16 slots.")
     
     tab_sgdk, tab_asm, tab_raw = st.tabs(["SGDK (C Array)", "Assembly (68k)", "Decimal Values"])
     
     with tab_sgdk:
-        hex_strings = [rgb_to_sgdk_hex(c) for c in st.session_state.custom_palette]
-        sgdk_code = f"// Custom Sega Genesis Palette Block\nconst u16 custom_vdp_palette[{len(st.session_state.custom_palette)}] = {{\n    {', '.join(hex_strings)}\n}};"
+        hex_strings = [rgb_to_sgdk_hex(c) for c in st.session_state.custom_palette if c is not None]
+        sgdk_code = f"// Custom Sega Genesis Palette Block\nconst u16 custom_vdp_palette[{len(hex_strings)}] = {{\n    {', '.join(hex_strings)}\n}};"
         st.code(sgdk_code, language="c")
         
     with tab_asm:
-        asm_strings = [rgb_to_asm_hex(c) for c in st.session_state.custom_palette]
+        asm_strings = [rgb_to_asm_hex(c) for c in st.session_state.custom_palette if c is not None]
         asm_code = f"; Custom Sega Genesis Palette Block\nCustomVDPPalette:\n    dc.w {', '.join(asm_strings)}"
         st.code(asm_code, language="asm")
         
     with tab_raw:
         st.text("Raw RGB Tuple List:")
         for idx, c in enumerate(st.session_state.custom_palette):
-            st.text(f"Index {idx}: {c}")
+            if c is not None:
+                st.text(f"Slot {idx}: {c}")
 else:
     st.markdown("---")
     st.info("💡 Add colors using the **➕ Add** buttons under the calculated harmonies to populate your 16-color workspace and unlock the export code generator.")
