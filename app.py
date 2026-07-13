@@ -10,10 +10,8 @@ st.title("🎮 Sega Genesis / Mega Drive Color Wheel")
 st.markdown("Create and calculate color harmonies locked strictly to the **512 colors (9-bit VDP RGB)** of the original hardware.")
 
 # --- INJECT CUSTOM CSS TO REMOVE ROLLOVER AND FORCE PERFECT ALIGNMENT ---
-# This disables color picker pointer-events AND centers all navigation buttons under slots perfectly.
 st.markdown("""
     <style>
-        /* Disable mouse selection events on disabled/preview color picks */
         div[data-testid="stColorPicker"] {
             pointer-events: none !important;
             cursor: default !important;
@@ -21,8 +19,6 @@ st.markdown("""
         section[data-testid="stSidebar"] div[data-testid="stColorPicker"] {
             pointer-events: auto !important;
         }
-        
-        /* FIX: Center and block-stretch the arrow and delete buttons inside the 16 slots layout */
         div[data-testid="stHorizontalBlock"] button {
             display: block !important;
             margin: 0 auto !important;
@@ -90,8 +86,6 @@ vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
-
-# DEFINITIVE FIX: Separated the tuple indices (0, 1, 2) to eliminate the formatting TypeError
 base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
 
 st.sidebar.markdown("**Selected Base Preview:**")
@@ -100,6 +94,65 @@ st.sidebar.color_picker("Hardware Base Color", base_hex, key=f"sb_preview_{base_
 # Extract active hardware brightness
 r_norm, g_norm, b_norm = base_genesis[0]/255.0, base_genesis[1]/255.0, base_genesis[2]/255.0
 _, _, dynamic_value = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
+
+# --- HARMONY RULE LOGIC ---
+palette = []
+if harmony_rule == "Analogous":
+    palette = [
+        calculate_harmonies(base_genesis, -60),
+        calculate_harmonies(base_genesis, -30),
+        base_genesis,
+        calculate_harmonies(base_genesis, 30),
+        calculate_harmonies(base_genesis, 60)
+    ]
+elif harmony_rule == "Monochromatic":
+    palette = [
+        calculate_harmonies(base_genesis, 0, sat_mod=0.2, val_mod=0.4),
+        calculate_harmonies(base_genesis, 0, sat_mod=0.5, val_mod=0.7),
+        base_genesis,
+        calculate_harmonies(base_genesis, 0, sat_mod=0.8, val_mod=0.9),
+        calculate_harmonies(base_genesis, 0, sat_mod=0.6, val_mod=1.2)
+    ]
+elif harmony_rule == "Triad":
+    palette = [
+        calculate_harmonies(base_genesis, 0, val_mod=0.6),
+        base_genesis,
+        calculate_harmonies(base_genesis, 120),
+        calculate_harmonies(base_genesis, 240),
+        calculate_harmonies(base_genesis, 240, val_mod=0.7)
+    ]
+elif harmony_rule == "Complementary":
+    palette = [
+        calculate_harmonies(base_genesis, 0, val_mod=0.5),
+        calculate_harmonies(base_genesis, 0, val_mod=0.8),
+        base_genesis,
+        calculate_harmonies(base_genesis, 180),
+        calculate_harmonies(base_genesis, 180, val_mod=0.6)
+    ]
+elif harmony_rule == "Split Complementary":
+    palette = [
+        calculate_harmonies(base_genesis, -150),
+        calculate_harmonies(base_genesis, -30),
+        base_genesis,
+        calculate_harmonies(base_genesis, 150),
+        calculate_harmonies(base_genesis, 180)
+    ]
+elif harmony_rule == "Square":
+    palette = [
+        base_genesis,
+        calculate_harmonies(base_genesis, 90),
+        calculate_harmonies(base_genesis, 180),
+        calculate_harmonies(base_genesis, 270),
+        calculate_harmonies(base_genesis, 270, val_mod=0.6)
+    ]
+elif harmony_rule == "Compound":
+    palette = [
+        calculate_harmonies(base_genesis, -30, sat_mod=0.6),
+        calculate_harmonies(base_genesis, 30, val_mod=0.8),
+        base_genesis,
+        calculate_harmonies(base_genesis, 180, sat_mod=0.4),
+        calculate_harmonies(base_genesis, 180)
+    ]
 
 # --- MAIN INTERFACE LAYOUT ---
 col_wheel, col_values = st.columns([0.8, 1.4])
@@ -142,7 +195,7 @@ with col_wheel:
     fig.patch.set_facecolor('none')
     ax.set_facecolor('none')
     st.pyplot(fig)
-
+    
 with col_values:
     st.write("### Calculated Harmonies")
     cols_palette = st.columns(5)
@@ -186,7 +239,6 @@ for i in range(16):
             st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
             st.caption(f"<center><code>{rgb_to_sgdk_hex(slot_data)}</code></center>", unsafe_allow_html=True)
             
-            # PERFECT SYMMETRY FIX: Layout sub-columns for navigation buttons centered perfectly via CSS
             move_left, clear_cell, move_right = st.columns(3)
             
             with move_left:
@@ -226,7 +278,6 @@ if any(c is not None for c in st.session_state.custom_palette):
     st.write("### 💻 Export Code & Assets for Your Project")
     st.caption("These assets update dynamically containing only the active valid colors from your 16 slots.")
     
-    # Generate Aseprite .GPL format file content string
     gpl_content = "GIMP Palette\nName: Sega Genesis Custom Palette\nColumns: 16\n#\n"
     for idx, c in enumerate(st.session_state.custom_palette):
         if c is not None:
@@ -260,3 +311,10 @@ if any(c is not None for c in st.session_state.custom_palette):
         for idx, c in enumerate(st.session_state.custom_palette):
             if c is not None:
                 st.text(f"Slot {idx}: {c}")
+else:
+    st.markdown("---")
+    st.info("💡 Add colors using the **➕ Add** buttons under the calculated harmonies to populate your 16-color workspace and unlock the export panel.")
+
+# --- FOOTER ---
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.caption("Sega Genesis / Mega Drive Color Wheel | Conceptualized & Tested by Rodrigo Fontanella | Code co-generated via AI Assist | Open-source community tool.")
