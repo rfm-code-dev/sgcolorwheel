@@ -28,22 +28,34 @@ st.markdown("""
             align-items: center !important;
             text-align: center !important;
             justify-content: flex-start !important;
+            width: 100% !important;
         }
         
-        /* FIX 2: Ensure color picker blocks maintain 100% width but center their internal color square */
-        div[data-testid="stColorPicker"], div[data-testid="stColorPickerBlock"] {
+        /* FIX 2: Force color pickers AND their parent wrappers to be cravated in the absolute horizontal center */
+        div[data-testid="stColorPicker"], 
+        div[data-testid="stColorPickerBlock"],
+        .stColorPicker,
+        div[data-testid="stColorPicker"] > div {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 0 auto !important;
+            text-align: center !important;
+        }
+        div[data-testid="stColorPicker"] > div {
+            width: 44px !important; /* Locks native square blueprint sizing */
+        }
+        
+        /* FIX 3: Force 'Add' and wrapper button divs to align to the absolute center of their grids */
+        div.stButton, div[data-testid="stHorizontalBlock"] div.stButton {
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
             margin: 0 auto !important;
             width: 100% !important;
         }
-        div[data-testid="stColorPicker"] > div {
-            margin: 0 auto !important;
-            width: 44px !important; /* Forces the box to keep its perfect native square size */
-        }
         
-        /* FIX 3: Reset markdown and caption elements to align text natively in the center */
+        /* FIX 4: Reset markdown and caption elements to align text natively in the center */
         div[data-testid="stMarkdown"], div[data-testid="stCaptionBlock"], p, center, b, code {
             display: block !important;
             text-align: center !important;
@@ -51,8 +63,8 @@ st.markdown("""
             margin: 0 auto !important;
         }
         
-        /* Center, block-stretch, and force uniform line height on all slot buttons */
-        div[data-testid="stHorizontalBlock"] button {
+        /* Force uniform line height and design footprint on all slot controls */
+        div[data-testid="stHorizontalBlock"] button, div.stButton > button {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -399,7 +411,7 @@ if any(c is not None for c in st.session_state.custom_palette):
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
             if c is not None:
-                st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
+                st.text(f"Slot {idx}: ({c[0]}, {c[1], c[2]})")
 else:
     st.markdown("---")
     st.info("💡 Add colors using the **➕ Add** buttons under the calculated harmonies to populate your 16-color workspace and unlock the export panel.")
