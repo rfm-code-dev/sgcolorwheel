@@ -79,8 +79,6 @@ vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
-
-# FIXED: Explicitly unrolling the tuple elements to prevent the baseline formatting error
 base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
 
 st.sidebar.markdown("**Selected Base Preview:**")
@@ -150,25 +148,27 @@ elif harmony_rule == "Compound":
     ]
 
 # --- MAIN INTERFACE LAYOUT ---
-col_wheel, col_values = st.columns([1, 1.2])
+# CORREÇÃO 3: Ajustado a proporção das colunas de [1, 1.2] para [0.8, 1.4] para deixar a roda menor na tela
+col_wheel, col_values = st.columns([0.8, 1.4])
 
 with col_wheel:
     st.write("### VDP 9-bit Color Wheel")
     
-    # Figure footprint reduced to 3.2 for sleek sidebar proportions
     fig, ax = plt.subplots(figsize=(3.2, 3.2), subplot_kw=dict(projection='polar'))
     
-    # Dense scatter pixel matrix for dynamic shading without data types breaking
+    # CORREÇÃO 2: np.linspace garante anéis perfeitamente equidistantes e simétricos do centro à borda
     angles_bg = np.linspace(0, 2 * np.pi, 64, endpoint=False)
-    radii_bg = np.sqrt(np.linspace(0.01, 1.0, 12))
+    radii_bg = np.linspace(0.08, 1.0, 10)
     
     for a in angles_bg:
         for r_g in radii_bg:
             r_res, g_res, b_res = colorsys.hsv_to_rgb(a / (2 * np.pi), r_g, max(0.0, dynamic_value))
             q_r, q_g, q_b = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
             
-            ax.scatter(a, r_g, color=f"#{q_r:02X}{q_g:02X}{q_b:02X}", s=25, alpha=0.9, linewidths=0, zorder=1)
+            # Mantendo os pontos de fundo pequenos fixos (s=15)
+            ax.scatter(a, r_g, color=f"#{q_r:02X}{q_g:02X}{q_b:02X}", s=15, alpha=0.9, linewidths=0, zorder=1)
             
+    # Overlay lines and harmony nodes
     for idx, color in enumerate(palette):
         r_v, g_v, b_v = int(color[0]), int(color[1]), int(color[2])
         r_n, g_n, b_n = r_v / 255.0, g_v / 255.0, b_v / 255.0
@@ -176,17 +176,23 @@ with col_wheel:
         rad_angle = h * 2 * np.pi
         s_plot = max(0.02, s)
         
-        ax.plot([0, rad_angle], [0, s_plot], color="white", linestyle="--", alpha=0.9, linewidth=1.5, zorder=5)
+        # CORREÇÃO 4: Espessura da linha tracejada reduzida de 1.5 para 0.8 (mais fina)
+        ax.plot([0, rad_angle], [0, s_plot], color="white", linestyle="--", alpha=0.8, linewidth=0.8, zorder=5)
         node_border = "#000000" if v > 0.5 else "#FFFFFF"
         
+        # CORREÇÃO 4: Espessura da borda da bolinha (linewidths) reduzida de 2.0 para 1.0 e s=100 (menor)
         ax.scatter(
             rad_angle, s_plot, 
             color=f"#{r_v:02X}{g_v:02X}{b_v:02X}", 
-            edgecolor=node_border, s=150, zorder=10, linewidths=2.0
+            edgecolor=node_border, s=100, zorder=10, linewidths=1.0
         )
         
     ax.set_yticklabels([])
     ax.set_xticklabels([])
+    
+    # CORREÇÃO 1: Trava absoluta do limite do raio para impedir o zoom automático (Fim do bug de bolas gigantes)
+    ax.set_rmax(1.0)
+    
     ax.grid(False)
     fig.patch.set_facecolor('none')
     ax.set_facecolor('none')
@@ -198,7 +204,6 @@ with col_values:
     
     for i, color in enumerate(palette):
         with cols_palette[i]:
-            # FIXED: Flattening individual array indices explicitly
             hex_color = f"#{color[0]:02X}{color[1]:02X}{color[2]:02X}"
             label_title = f"⭐ Base Color" if color == base_genesis and i == 2 else f"Color {i+1}"
             
@@ -226,7 +231,6 @@ for i in range(16):
         st.markdown(f"<center><b>Slot {i}</b></center>", unsafe_allow_html=True)
         if i < len(st.session_state.custom_palette):
             slot_color = st.session_state.custom_palette[i]
-            # FIXED: Unrolled color indices safely
             slot_hex = f"#{slot_color[0]:02X}{slot_color[1]:02X}{slot_color[2]:02X}"
             st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
             st.caption(f"<center><code>{rgb_to_sgdk_hex(slot_color)}</code></center>", unsafe_allow_html=True)
@@ -268,4 +272,3 @@ else:
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
 st.caption("Sega Genesis / Mega Drive Color Wheel | Conceptualized & Tested by Rodrigo Fontanella | Code co-generated via AI Assist | Open-source community tool.")
-
