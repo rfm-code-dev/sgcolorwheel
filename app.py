@@ -9,84 +9,6 @@ st.set_page_config(page_title="Sega Genesis / Mega Drive Color Wheel", page_icon
 st.title("🎮 Sega Genesis / Mega Drive Color Wheel")
 st.markdown("Create and calculate color harmonies locked strictly to the **512 colors (9-bit VDP RGB)** of the original hardware.")
 
-# --- INJECT CUSTOM CSS FOR PERFECT GLOBAL ALIGNMENT AND SYMMETRY ---
-st.markdown("""
-    <style>
-        /* Disable mouse selection events on disabled/preview color picks */
-        div[data-testid="stColorPicker"] {
-            pointer-events: none !important;
-            cursor: default !important;
-        }
-        section[data-testid="stSidebar"] div[data-testid="stColorPicker"] {
-            pointer-events: auto !important;
-        }
-        
-        /* FIX 1: Force absolute horizontal centralization on ALL components inside layout columns */
-        div[data-testid="column"] {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            text-align: center !important;
-            justify-content: flex-start !important;
-            width: 100% !important;
-        }
-        
-        /* FIX 2: Force color pickers AND their parent wrappers to be cravated in the absolute horizontal center */
-        div[data-testid="stColorPicker"], 
-        div[data-testid="stColorPickerBlock"],
-        .stColorPicker,
-        div[data-testid="stColorPicker"] > div {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            margin: 0 auto !important;
-            text-align: center !important;
-        }
-        div[data-testid="stColorPicker"] > div {
-            width: 44px !important; /* Locks native square blueprint sizing */
-        }
-        
-        /* FIX 3: Force 'Add' and wrapper button divs to align to the absolute center of their grids */
-        div.stButton, div[data-testid="stHorizontalBlock"] div.stButton {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            margin: 0 auto !important;
-            width: 100% !important;
-        }
-        
-        /* FIX 4: Reset markdown and caption elements to align text natively in the center */
-        div[data-testid="stMarkdown"], div[data-testid="stCaptionBlock"], p, center, b, code {
-            display: block !important;
-            text-align: center !important;
-            width: 100% !important;
-            margin: 0 auto !important;
-        }
-        
-        /* Force uniform line height and design footprint on all slot controls */
-        div[data-testid="stHorizontalBlock"] button, div.stButton > button {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin: 0 auto !important;
-            padding: 2px 0px !important;
-            height: 28px !important;
-            width: 100% !important;
-            text-align: center !important;
-            line-height: 1 !important;
-        }
-        
-        /* Eliminate unexpected layout padding issues */
-        div[data-testid="column"] [data-testid="stHorizontalBlock"] {
-            gap: 2px !important;
-            width: 100% !important;
-        }
-        div[data-testid="column"] [data-testid="stHorizontalBlock"] div[data-testid="column"] {
-            padding: 0px 1px !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # --- HARDWARE TECHNICAL CONSTANTS ---
 VDP_STEPS = (0, 36, 73, 109, 146, 182, 219, 255)
 
@@ -299,26 +221,40 @@ with col_values:
     
     for i, color in enumerate(palette):
         with cols_palette[i]:
-            r_c, g_c, b_c = int(color[0]), int(color[1]), int(color[2])
-            hex_color = f"#{r_c:02X}{g_c:02X}{b_c:02X}"
-            label_title = f"⭐ Base Color" if color == base_genesis and i == 2 else f"Color {i+1}"
-            
-            st.color_picker(label_title, hex_color, key=f"vdp_node_{i}_{hex_color.replace('#', '')}")
-            
-            st.markdown(f"<div style='text-align: center; width:100%;'><b>SGDK:</b> <code>{rgb_to_sgdk_hex(color)}</code></div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='text-align: center; width:100%; color:gray; font-size:12px;'>RGB: ({r_c}, {g_c}, {b_c})</div>", unsafe_allow_html=True)
-            
-            if st.button("➕ Add", key=f"add_btn_{i}_{hex_color.replace('#', '')}"):
-                inserted = False
-                for s_idx in range(16):
-                    if st.session_state.custom_palette[s_idx] is None:
-                        st.session_state.custom_palette[s_idx] = color
-                        inserted = True
-                        break
-                if inserted:
-                    st.rerun()
-                else:
-                    st.sidebar.error("All 16 slots are full!")
+            # NATIVE FIX: Wrapping element into an explicit center container to bypass browser alignments
+            with st.container():
+                r_c, g_c, b_c = int(color[0]), int(color[1]), int(color[2])
+                hex_color = f"#{r_c:02X}{g_c:02X}{b_c:02X}"
+                label_title = f"⭐ Base" if color == base_genesis and i == 2 else f"Color {i+1}"
+                
+                # HTML template injected inside the container forcing true horizontal lock
+                st.markdown(f"<div style='text-align:center; font-weight:bold; font-size:14px; margin-bottom:5px;'>{label_title}</div>", unsafe_allow_html=True)
+                
+                # Render color box picker
+                st.color_picker(label_title, hex_color, key=f"vdp_node_{i}_{hex_color.replace('#', '')}", label_visibility="collapsed")
+                
+                st.markdown(f"<div style='text-align:center; margin-top:4px;'><code>{rgb_to_sgdk_hex(color)}</code></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; color:gray; font-size:11px;'>({r_c},{g_c},{b_c})</div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+                
+                if st.button("➕ Add", key=f"add_btn_{i}_{hex_color.replace('#', '')}"):
+                    inserted = False
+                    for s_idx in range(16):
+                        if st.session_state.custom_palette[s_idx] is None:
+                            st.session_state.custom_palette[s_idx] = color
+                            inserted = True
+                            break
+                    if inserted:
+                        st.rerun()
+                    else:
+                        st.sidebar.error("All 16 slots are full!")
+
+    # SUGGESTION FULFILLED: Informative guidance box moved right below the Calculated Harmonies column block
+    st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
+    if not any(c is not None for c in st.session_state.custom_palette):
+        st.info("💡 Add colors using the **➕ Add** buttons above to populate your 16-color workspace and unlock the export generator panel below.")
+    else:
+        st.success("💡 Colors added successfully! Organize your sequence below using the arrow controls.")
 
 # --- 16-COLOR PALETTE BUILDER WORKSPACE ---
 st.markdown("---")
@@ -334,37 +270,39 @@ for i in range(16):
         slot_data = st.session_state.custom_palette[i]
         
         if slot_data is not None:
-            r_sl, g_sl, b_sl = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
-            slot_hex = f"#{r_sl:02X}{g_sl:02X}{b_sl:02X}"
-            st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
-            st.markdown(f"<center><code>{rgb_to_sgdk_hex(slot_data)}</code></center>", unsafe_allow_html=True)
-            
-            move_left, clear_cell, move_right = st.columns(3)
-            
-            with move_left:
-                if i > 0:
-                    if st.button("◀", key=f"mv_l_{i}", help="Shift left"):
-                        st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
+            with st.container():
+                r_sl, g_sl, b_sl = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
+                slot_hex = f"#{r_sl:02X}{g_sl:02X}{b_sl:02X}"
+                st.color_picker(f"S{i}", slot_hex, key=f"slot_box_{i}_{slot_hex.replace('#','')}", label_visibility="collapsed")
+                st.markdown(f"<center><code>{rgb_to_sgdk_hex(slot_data)}</code></center>", unsafe_allow_html=True)
+                
+                move_left, clear_cell, move_right = st.columns(3)
+                
+                with move_left:
+                    if i > 0:
+                        if st.button("◀", key=f"mv_l_{i}", help="Shift left"):
+                            st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
+                            st.rerun()
+                    else:
+                        st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                
+                with clear_cell:
+                    if st.button("X", key=f"clear_slot_btn_{i}", help="Delete color from this slot"):
+                        st.session_state.custom_palette[i] = None
                         st.rerun()
-                else:
-                    st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
-            
-            with clear_cell:
-                if st.button("X", key=f"clear_slot_btn_{i}", help="Delete color from this slot"):
-                    st.session_state.custom_palette[i] = None
-                    st.rerun()
-                    
-            with move_right:
-                if i < 15:
-                    if st.button("▶", key=f"mv_r_{i}", help="Shift right"):
-                        st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
-                        st.rerun()
-                else:
-                    st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                        
+                with move_right:
+                    if i < 15:
+                        if st.button("▶", key=f"mv_r_{i}", help="Shift right"):
+                            st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
+                            st.rerun()
+                    else:
+                        st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
         else:
-            st.color_picker(f"S{i}", "#222222", key=f"slot_box_empty_{i}", disabled=True, label_visibility="collapsed")
-            st.caption("<center><code style='color:gray;'>0x----</code></center>", unsafe_allow_html=True)
-            st.markdown("<br><br><br>", unsafe_allow_html=True)
+            with st.container():
+                st.color_picker(f"S{i}", "#222222", key=f"slot_box_empty_{i}", disabled=True, label_visibility="collapsed")
+                st.caption("<center><code style='color:gray;'>0x----</code></center>", unsafe_allow_html=True)
+                st.markdown("<br><br><br>", unsafe_allow_html=True)
 
 
 if any(c is not None for c in st.session_state.custom_palette):
@@ -374,7 +312,7 @@ if any(c is not None for c in st.session_state.custom_palette):
         st.rerun()
 
 # --- CODE EXPORT & ASEPRITE DOWNLOAD BLOCK ---
-if any(c is not None for c in st.session_state.custom_palette):
+if [c for c in st.session_state.custom_palette if c is not None]:
     st.markdown("---")
     st.write("### 💻 Export Code & Assets for Your Project")
     st.caption("These assets update dynamically containing only the active valid colors from your 16 slots.")
@@ -411,10 +349,7 @@ if any(c is not None for c in st.session_state.custom_palette):
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
             if c is not None:
-                st.text(f"Slot {idx}: ({c[0]}, {c[1], c[2]})")
-else:
-    st.markdown("---")
-    st.info("💡 Add colors using the **➕ Add** buttons under the calculated harmonies to populate your 16-color workspace and unlock the export panel.")
+                st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
 
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
