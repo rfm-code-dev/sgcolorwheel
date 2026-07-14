@@ -77,6 +77,8 @@ VDP_STEPS = (0, 36, 73, 109, 146, 182, 219, 255)
 
 def quantize_to_genesis(rgb):
     """Snaps any standard RGB color to the nearest native Sega Genesis VDP color."""
+    if not isinstance(rgb, tuple) or len(rgb) != 3:
+        return (0, 0, 0)
     return tuple(min(VDP_STEPS, key=lambda x: abs(x - c)) for c in rgb)
 
 def rgb_to_sgdk_hex(rgb):
@@ -109,12 +111,27 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- FIXED ULTRA PERFORMANCE ENGINE ---
+# --- COLOR RAMP ENGINE: Generates a mathematically perfect 8-step hardware gradient ---
+def generate_hardware_ramp(base_rgb):
+    if not isinstance(base_rgb, tuple) or len(base_rgb) != 3:
+        return [(0,0,0)] * 8
+    r, g, b = [c / 255.0 for c in base_rgb]
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    ramp = []
+    v_steps = np.linspace(1.0, 0.1, 8)
+    for step_v in v_steps:
+        r_res, g_res, b_res = colorsys.hsv_to_rgb(h, s, step_v)
+        quantized = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
+        if quantized not in ramp:
+            ramp.append(quantized)
+    while len(ramp) < 8:
+        ramp.append((0, 0, 0))
+    return ramp
+
 @st.cache_data
 def get_cached_precomputed_wheel(brightness_val):
     angles = np.linspace(0, 2 * np.pi, 64, endpoint=False)
     radii = np.linspace(0.08, 1.0, 10)
-    
     a_list, r_list, c_list = [], [], []
     for a in angles:
         for r_g in radii:
@@ -123,7 +140,6 @@ def get_cached_precomputed_wheel(brightness_val):
             a_list.append(a)
             r_list.append(r_g)
             c_list.append(f"#{q_r:02X}{q_g:02X}{q_b:02X}")
-            
     return np.array(a_list), np.array(r_list), c_list
 
 
@@ -132,6 +148,9 @@ if "custom_palette" not in st.session_state or len(st.session_state.custom_palet
     st.session_state.custom_palette = [None] * 16
 if "active_ramp_source" not in st.session_state:
     st.session_state.active_ramp_source = None
+
+# --- SAFETY GUARDIAN: Force clear ghost link strings from old browser history loops ---
+st.query_params.clear()
 
 # --- SIDEBAR CONFIGURATION ---
 st.sidebar.header("🕹️ Harmony Panel")
@@ -245,23 +264,23 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # CRITICAL BUGFIX: Pointing explicit list indexes [0] and [1] for move_cols array block to kill NameError loop
+                # TOTAL CONVERGENCE FIX: Safe data mapping utilizing index targets explicitly
                 move_cols = st.columns(2)
                 with move_cols[0]:
-                    if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#',' Concordant')}"):
+                    if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
-                                st.session_state.custom_palette[s_idx] = color
+                                st.session_state.custom_palette[s_idx] = (r_c, g_c, b_c)
                                 break
                         st.rerun()
                 with move_cols[1]:
                     if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
-                        st.session_state.active_ramp_source = color
+                        st.session_state.active_ramp_source = (r_c, g_c, b_c)
                         st.rerun()
 
     # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
-    if st.session_state.active_ramp_source:
+    if isinstance(st.session_state.active_ramp_source, tuple) and len(st.session_state.active_ramp_source) == 3:
         st.write("#### ⚡ Generated 8-Step Hardware Color Ramp")
         active_ramp = generate_hardware_ramp(st.session_state.active_ramp_source)
         ramp_cols = st.columns(8)
@@ -281,7 +300,7 @@ with col_values:
                     if st.button("+", key=f"add_ramp_cell_{r_idx}_{r_hex.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
-                                st.session_state.custom_palette[s_idx] = r_color
+                                st.session_state.custom_palette[s_idx] = (r_r, r_g, r_b)
                                 break
                         st.rerun()
                             
