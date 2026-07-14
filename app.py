@@ -100,12 +100,27 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- FIXED ULTRA PERFORMANCE ENGINE: Pre-calculating arrays into single memory blocks ---
+# --- NEW COLOR RAMP ENGINE: Generates a mathematically perfect 8-step hardware gradient ---
+def generate_hardware_ramp(base_rgb):
+    r, g, b = [c / 255.0 for c in base_rgb]
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    ramp = []
+    # Generates 8 steps of luminance scaling from peak bright down to near-black
+    v_steps = np.linspace(1.0, 0.1, 8)
+    for step_v in v_steps:
+        r_res, g_res, b_res = colorsys.hsv_to_rgb(h, s, step_v)
+        quantized = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
+        if quantized not in ramp:  # Avoid duplicate indices if hardware rounding steps group tightly
+            ramp.append(quantized)
+    # Fill tail padding if hardware constraints flatten steps to keep array footprint clean
+    while len(ramp) < 8:
+        ramp.append((0, 0, 0))
+    return ramp
+
 @st.cache_data
 def get_cached_precomputed_wheel(brightness_val):
     angles = np.linspace(0, 2 * np.pi, 64, endpoint=False)
     radii = np.linspace(0.08, 1.0, 10)
-    
     a_list, r_list, c_list = [], [], []
     for a in angles:
         for r_g in radii:
@@ -114,32 +129,33 @@ def get_cached_precomputed_wheel(brightness_val):
             a_list.append(a)
             r_list.append(r_g)
             c_list.append(f"#{q_r:02X}{q_g:02X}{q_b:02X}")
-            
     return np.array(a_list), np.array(r_list), c_list
 
 
 # --- INITIALIZE PALETTE ARRAY SLOTS AS FIXED 16 ELEMENT LIST ---
 if "custom_palette" not in st.session_state or len(st.session_state.custom_palette) != 16:
     st.session_state.custom_palette = [None] * 16
+if "active_ramp_source" not in st.session_state:
+    st.session_state.active_ramp_source = None
 
-# --- INTERCEPT AND PROCESS HYBRID HTML ADD CLICKS VIA URL PARAMETERS ---
-# This catches clicks from the custom aligned HTML buttons instantly
+# --- PROCESS HYBRID INTERFACE PARAMS VIA URL ---
 query_params = st.query_params
 if "add_r" in query_params and "add_g" in query_params and "add_b" in query_params:
     try:
-        r_add = int(query_params["add_r"])
-        g_add = int(query_params["add_g"])
-        b_add = int(query_params["add_b"])
+        r_add, g_add, b_add = int(query_params["add_r"]), int(query_params["add_g"]), int(query_params["add_b"])
         color_to_add = (r_add, g_add, b_add)
-        
-        # Find first empty slot to inject color color arrays
-        inserted = False
         for s_idx in range(16):
             if st.session_state.custom_palette[s_idx] is None:
                 st.session_state.custom_palette[s_idx] = color_to_add
-                inserted = True
                 break
-        # Clear URL parameters immediately to clean context state loops
+        st.query_params.clear()
+        st.rerun()
+    except Exception:
+        pass
+
+if "ramp_r" in query_params and "ramp_g" in query_params and "ramp_b" in query_params:
+    try:
+        st.session_state.active_ramp_source = (int(query_params["ramp_r"]), int(query_params["ramp_g"]), int(query_params["ramp_b"]))
         st.query_params.clear()
         st.rerun()
     except Exception:
@@ -147,12 +163,7 @@ if "add_r" in query_params and "add_g" in query_params and "add_b" in query_para
 
 # --- SIDEBAR CONFIGURATION ---
 st.sidebar.header("🕹️ Harmony Panel")
-
-harmony_rule = st.sidebar.selectbox(
-    "Harmony Rule:",
-    ["Analogous", "Monochromatic", "Triad", "Complementary", "Split Complementary", "Square", "Compound"]
-)
-
+harmony_rule = st.sidebar.selectbox("Harmony Rule:", ["Analogous", "Monochromatic", "Triad", "Complementary", "Split Complementary", "Square", "Compound"])
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
@@ -161,24 +172,15 @@ vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
-
-r_hex_val = int(base_genesis[0])
-g_hex_val = int(base_genesis[1])
-b_hex_val = int(base_genesis[2])
-base_hex = f"#{r_hex_val:02X}{g_hex_val:02X}{b_hex_val:02X}"
+base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
 
 st.sidebar.markdown("**Selected Base Preview:**")
-st.sidebar.markdown(f"""
-    <div style="display:flex; justify-content:center; align-items:center; width:100%; margin: 5px 0;">
-        <div style="width:50px; height:30px; background-color:{base_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.3);"></div>
-    </div>
-""", unsafe_allow_html=True)
+st.sidebar.markdown(f"""<div style="display:flex; justify-content:center; align-items:center; width:100%; margin: 5px 0;"><div style="width:50px; height:30px; background-color:{base_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.3);"></div></div>""", unsafe_allow_html=True)
 
-# --- IMPORT ASEPRITE .GPL PALETTE ---
+# --- IMPORT GPL PALETTE ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("📥 Import Palette (.GPL)")
 uploaded_gpl = st.sidebar.file_uploader("Upload an Aseprite GPL file:", type=["gpl"])
-
 if uploaded_gpl is not None:
     try:
         gpl_lines = uploaded_gpl.read().decode("utf-8").splitlines()
@@ -189,29 +191,18 @@ if uploaded_gpl is not None:
                 continue
             parts = line.split()
             if len(parts) >= 3:
-                try:
-                    r_imp = int(parts[0])
-                    g_imp = int(parts[1])
-                    b_imp = int(parts[2])
-                    imported_colors.append(quantize_to_genesis((r_imp, g_imp, b_imp)))
-                except ValueError:
-                    continue
+                imported_colors.append(quantize_to_genesis((int(parts[0]), int(parts[1]), int(parts[2]))))
         new_palette = [None] * 16
         for idx, col in enumerate(imported_colors[:16]):
-            if col == (34, 34, 34):
-                new_palette[idx] = None
-            else:
-                new_palette[idx] = col
+            new_palette[idx] = None if col == (34, 34, 34) else col
         st.session_state.custom_palette = new_palette
-        st.sidebar.success(f"Successfully loaded {len(imported_colors[:16])} indices!")
-    except Exception as e:
+        st.sidebar.success("Successfully loaded!")
+    except Exception:
         st.sidebar.error("Error reading GPL file.")
 
-# Extract active hardware brightness
 r_norm, g_norm, b_norm = base_genesis[0]/255.0, base_genesis[1]/255.0, base_genesis[2]/255.0
 _, _, dynamic_value = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
 
-# --- HARMONY RULE LOGIC ---
 palette = []
 if harmony_rule == "Analogous":
     palette = [calculate_harmonies(base_genesis, -60), calculate_harmonies(base_genesis, -30), base_genesis, calculate_harmonies(base_genesis, 30), calculate_harmonies(base_genesis, 60)]
@@ -228,36 +219,23 @@ elif harmony_rule == "Square":
 elif harmony_rule == "Compound":
     palette = [calculate_harmonies(base_genesis, -30, sat_mod=0.6), calculate_harmonies(base_genesis, 30, val_mod=0.8), base_genesis, calculate_harmonies(base_genesis, 180, sat_mod=0.4), calculate_harmonies(base_genesis, 180)]
 
-# --- MAIN INTERFACE LAYOUT ---
 col_wheel, col_values = st.columns([0.8, 1.4])
-
 with col_wheel:
     st.write("### VDP 9-bit Color Wheel")
     fig, ax = plt.subplots(figsize=(3.2, 3.2), subplot_kw=dict(projection='polar'))
-    
     ax.set_autoscale_on(False)
     ax.set_rmax(1.12)
-    
     bg_a, bg_r, bg_c = get_cached_precomputed_wheel(dynamic_value)
     ax.scatter(bg_a, bg_r, color=bg_c, s=15, alpha=0.9, linewidths=0, zorder=1)
-            
     for idx, color in enumerate(palette):
-        r_v, g_v, b_v = int(color[0]), int(color[1]), int(color[2])
-        r_n, g_n, b_n = r_v / 255.0, g_v / 255.0, b_v / 255.0
+        r_n, g_n, b_n = color[0]/255.0, color[1]/255.0, color[2]/255.0
         h, s, v = colorsys.rgb_to_hsv(r_n, g_n, b_n)
         rad_angle = h * 2 * np.pi
-        s_plot = max(0.02, s)
-        
-        ax.plot([0, rad_angle], [0, s_plot], color="white", linestyle="--", alpha=0.8, linewidth=0.8, zorder=5)
+        ax.plot([0, rad_angle], [0, max(0.02, s)], color="white", linestyle="--", alpha=0.8, linewidth=0.8, zorder=5)
         node_border = "#000000" if v > 0.5 else "#FFFFFF"
-        ax.scatter(rad_angle, s_plot, color=f"#{r_v:02X}{g_v:02X}{b_v:02X}", edgecolor=node_border, s=100, zorder=10, linewidths=1.0)
-        
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-    ax.grid(False)
-    fig.patch.set_facecolor('none')
-    ax.set_facecolor('none')
-    
+        ax.scatter(rad_angle, max(0.02, s), color=f"#{color[0]:02X}{color[1]:02X}{color[2]:02X}", edgecolor=node_border, s=100, zorder=10, linewidths=1.0)
+    ax.set_yticklabels([]); ax.set_xticklabels([]); ax.grid(False)
+    fig.patch.set_facecolor('none'); ax.set_facecolor('none')
     st.pyplot(fig)
     plt.close(fig)
 
@@ -265,107 +243,82 @@ with col_wheel:
 with col_values:
     st.write("### Calculated Harmonies")
     cols_palette = st.columns(5)
-    
-    display_count = min(len(palette), 5)
-    for i in range(display_count):
-        color = palette[i]
+    for i, color in enumerate(palette[:5]):
         with cols_palette[i]:
             with st.container():
-                r_c, g_c, b_c = int(color[0]), int(color[1]), int(color[2])
-                hex_color = f"#{r_c:02X}{g_c:02X}{b_c:02X}"
+                hex_color = f"#{color[0]:02X}{color[1]:02X}{color[2]:02X}"
                 label_title = f"⭐ Base" if color == base_genesis and i == 2 else f"Color {i+1}"
                 
-                # REVOLUTIONARY FIX: Swapped the Streamlit button for an inline native CSS flex button.
-                # This explicitly locks BOTH the color brick and the '+ Add' controller button on the same vertical center line!
+                # ADDED: Added a 'Ramp' link interaction to calculate color ramp vectors seamlessly
                 st.markdown(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
                         <div style="font-weight:bold; font-size:14px; margin-bottom:5px;">{label_title}</div>
                         <div style="width:44px; height:44px; background-color:{hex_color}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.25); margin-bottom:6px;"></div>
                         <div style="margin-bottom:2px;"><code>{rgb_to_sgdk_hex(color)}</code></div>
-                        <div style="color:gray; font-size:11px; margin-bottom:8px;">({r_c},{g_c},{b_c})</div>
-                        <a href="?add_r={r_c}&add_g={g_c}&add_b={b_c}" target="_self" style="
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            width: 65px;
-                            height: 24px;
-                            background-color: #262730;
-                            color: #ffffff;
-                            border: 1px solid #464855;
-                            border-radius: 4px;
-                            text-decoration: none;
-                            font-size: 12px;
-                            font-weight: bold;
-                            margin: 0 auto;
-                            cursor: pointer;
-                            transition: background-color 0.2s;
-                        " onmouseover="this.style.backgroundColor='#3a3c4a'" onmouseout="this.style.backgroundColor='#262730'">
-                            + Add
-                        </a>
+                        <div style="color:gray; font-size:11px; margin-bottom:8px;">({color[0]},{color[1]},{color[2]})</div>
+                        <div style="display:flex; gap:4px; justify-content:center; width:100%; margin: 0 auto;">
+                            <a href="?add_r={color[0]}&add_g={color[1]}&add_b={color[2]}" target="_self" style="display:flex; align-items:center; justify-content:center; width:45px; height:22px; background-color:#262730; color:#fff; border:1px solid #464855; border-radius:4px; text-decoration:none; font-size:11px; font-weight:bold;">+Add</a>
+                            <a href="?ramp_r={color[0]}&ramp_g={color[1]}&ramp_b={color[2]}" target="_self" style="display:flex; align-items:center; justify-content:center; width:45px; height:22px; background-color:#1E3A8A; color:#fff; border:1px solid #3B82F6; border-radius:4px; text-decoration:none; font-size:11px; font-weight:bold;">Ramp</a>
+                        </div>
                     </div>
                 """, unsafe_allow_html=True)
 
+    # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
+    if st.session_state.active_ramp_source:
+        st.write("#### ⚡ Generated 8-Step Hardware Color Ramp")
+        active_ramp = generate_hardware_ramp(st.session_state.active_ramp_source)
+        ramp_cols = st.columns(8)
+        for r_idx, r_color in enumerate(active_ramp):
+            with ramp_cols[r_idx]:
+                r_hex = f"#{r_color[0]:02X}{r_color[1]:02X}{r_color[2]:02X}"
+                st.markdown(f"""
+                    <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
+                        <div style="width:100%; height:25px; background-color:{r_hex}; border-radius:3px; border:1px solid #444; box-shadow:0px 1px 3px rgba(0,0,0,0.2);"></div>
+                        <span style="font-size:11px; font-family:monospace; margin-top:2px;">{rgb_to_sgdk_hex(r_color)}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                if st.button("➕", key=f"add_ramp_cell_{r_idx}_{r_hex.replace('#','')}"):
+                    for s_idx in range(16):
+                        if st.session_state.custom_palette[s_idx] is None:
+                            st.session_state.custom_palette[s_idx] = r_color
+                            st.rerun()
+                            
+    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
     if not any(c is not None for c in st.session_state.custom_palette):
-        st.info("💡 Add colors using the **+ Add** buttons above to populate your 16-color workspace and unlock the export generator panel below.")
+        st.info("💡 Add individual colors via **+Add**, or hit **Ramp** to calculate light/shadow structures automatically.")
     else:
-        st.success("💡 Colors added successfully! Organize your sequence below using the arrow controls.")
+        st.success("💡 Palette workspace populated! Organize or clear items below.")
 
 # --- 16-COLOR PALETTE BUILDER WORKSPACE ---
 st.markdown("---")
 st.write("### 🎛️ Active 16-Color Hardware Palette Builder")
-
-active_colors = [c for c in st.session_state.custom_palette if c is not None]
-st.caption(f"Slots filled: {len(active_colors)} / 16. (Use ◀ / ▶ arrows to organize index slots or X to clear a single position).")
-
 cols_16 = st.columns(16)
 for i in range(16):
     with cols_16[i]:
         st.markdown(f"<center><b>Slot {i}</b></center>", unsafe_allow_html=True)
         slot_data = st.session_state.custom_palette[i]
-        
         if slot_data is not None:
             with st.container():
-                r_sl, g_sl, b_sl = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
-                slot_hex = f"#{r_sl:02X}{g_sl:02X}{b_sl:02X}"
-                
-                st.markdown(f"""
-                    <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;">
-                        <div style="width:40px; height:44px; background-color:{slot_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.2); margin-bottom:4px;"></div>
-                        <code>{rgb_to_sgdk_hex(slot_data)}</code>
-                    </div>
-                """, unsafe_allow_html=True)
-                
+                slot_hex = f"#{slot_data[0]:02X}{slot_data[1]:02X}{slot_data[2]:02X}"
+                st.markdown(f"""<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;"><div style="width:40px; height:44px; background-color:{slot_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.2); margin-bottom:4px;"></div><code>{rgb_to_sgdk_hex(slot_data)}</code></div>""", unsafe_allow_html=True)
                 move_left, clear_cell, move_right = st.columns(3)
-                
                 with move_left:
-                    if i > 0:
-                        if st.button("◀", key=f"mv_l_{i}", help="Shift left"):
-                            st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
-                            st.rerun()
-                    else:
-                        st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
-                
-                with clear_cell:
-                    if st.button("X", key=f"clear_slot_btn_{i}", help="Delete color from this slot"):
-                        st.session_state.custom_palette[i] = None
+                    if i > 0 and st.button("◀", key=f"mv_l_{i}"):
+                        st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
                         st.rerun()
-                        
+                    elif i == 0: st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                with clear_cell:
+                    if st.button("X", key=f"clear_slot_btn_{i}"):
+                        st.session_state.custom_palette[i] = None; st.rerun()
                 with move_right:
-                    if i < 15:
-                        if st.button("▶", key=f"mv_r_{i}", help="Shift right"):
-                            st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
-                            st.rerun()
-                    else:
-                        st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                    if i < 15 and st.button("▶", key=f"mv_r_{i}"):
+                        st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
+                        st.rerun()
+                    elif i == 15: st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
         else:
             with st.container():
-                st.markdown("""
-                    <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;">
-                        <div style="width:40px; height:44px; background-color:#222; border-radius:4px; border:2px dashed #44px; margin-bottom:4px;"></div>
-                        <code style="color:gray;">0x----</code>
-                    </div>
-                """, unsafe_allow_html=True)
+                st.markdown("""<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;"><div style="width:40px; height:44px; background-color:#222; border-radius:4px; border:2px dashed #44px; margin-bottom:4px;"></div><code style="color:gray;">0x----</code></div>""", unsafe_allow_html=True)
                 st.markdown("<br><br><br>", unsafe_allow_html=True)
 
 
@@ -373,47 +326,32 @@ if any(c is not None for c in st.session_state.custom_palette):
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("❌ Clear Full Palette Work-area", type="secondary"):
         st.session_state.custom_palette = [None] * 16
+        st.session_state.active_ramp_source = None
         st.rerun()
 
 # --- CODE EXPORT & ASEPRITE DOWNLOAD BLOCK ---
 if [c for c in st.session_state.custom_palette if c is not None]:
     st.markdown("---")
     st.write("### 💻 Export Code & Assets for Your Project")
-    st.caption("These assets update dynamically containing only the active valid colors from your 16 slots.")
-    
     gpl_content = "GIMP Palette\nName: Sega Genesis Custom Palette\nColumns: 16\n#\n"
     for idx, c in enumerate(st.session_state.custom_palette):
-        if c is not None:
-            gpl_content += f"{c[0]:3d} {c[1]:3d} {c[2]:3d}\t{rgb_to_sgdk_hex(c)}\n"
-        else:
-            gpl_content += f" 34  34  34\tEmpty_Slot_{idx}\n"
+        if c is not None: gpl_content += f"{c[0]:3d} {c[1]:3d} {c[2]:3d}\t{rgb_to_sgdk_hex(c)}\n"
+        else: gpl_content += f" 34  34  34\tEmpty_Slot_{idx}\n"
             
-    st.download_button(
-        label="📥 Download Palette for Aseprite (.GPL)",
-        data=gpl_content,
-        file_name="genesis_palette.gpl",
-        mime="text/plain",
-        type="primary"
-    )
+    st.download_button(label="📥 Download Palette for Aseprite (.GPL)", data=gpl_content, file_name="genesis_palette.gpl", mime="text/plain", type="primary")
     st.markdown("<br>", unsafe_allow_html=True)
 
     tab_sgdk, tab_asm, tab_raw = st.tabs(["SGDK (C Array)", "Assembly (68k)", "Decimal Values"])
-    
     with tab_sgdk:
         hex_strings = [rgb_to_sgdk_hex(c) for c in st.session_state.custom_palette if c is not None]
-        sgdk_code = f"// Custom Sega Genesis Palette Block\nconst u16 custom_vdp_palette[{len(hex_strings)}] = {{\n    {', '.join(hex_strings)}\n}};"
-        st.code(sgdk_code, language="c")
-        
+        st.code(f"// Custom Sega Genesis Palette Block\nconst u16 custom_vdp_palette[{len(hex_strings)}] = {{\n    {', '.join(hex_strings)}\n}};", language="c")
     with tab_asm:
         asm_strings = [rgb_to_asm_hex(c) for c in st.session_state.custom_palette if c is not None]
-        asm_code = f"; Custom Sega Genesis Palette Block\nCustomVDPPalette:\n    dc.w {', '.join(asm_strings)}"
-        st.code(asm_code, language="asm")
-        
+        st.code(f"; Custom Sega Genesis Palette Block\nCustomVDPPalette:\n    dc.w {', '.join(asm_strings)}", language="asm")
     with tab_raw:
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
-            if c is not None:
-                st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
+            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
 
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
