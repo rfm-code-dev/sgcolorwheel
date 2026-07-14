@@ -152,8 +152,13 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
 vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_r_val', 0), key='vdp_r_slider')
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_r}</div>", unsafe_allow_html=True)
+
 vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_g_val', 6), key='vdp_g_slider')
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_g}</div>", unsafe_allow_html=True)
+
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_b_val', 4), key='vdp_b_slider')
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_b}</div>", unsafe_allow_html=True)
 
 st.session_state['vdp_r_val'] = vdp_r
 st.session_state['vdp_g_val'] = vdp_g
@@ -161,7 +166,6 @@ st.session_state['vdp_b_val'] = vdp_b
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
 
-# DEFINITIVE FIX: Separating the base_genesis tuple coordinates explicitly to kill the formatting TypeError
 r_base_int = int(base_genesis[0])
 g_base_int = int(base_genesis[1])
 b_base_int = int(base_genesis[2])
@@ -204,7 +208,7 @@ elif harmony_rule == "Monochromatic":
 elif harmony_rule == "Triad":
     palette = [calculate_harmonies(base_genesis, 0, val_mod=0.6), base_genesis, calculate_harmonies(base_genesis, 120), calculate_harmonies(base_genesis, 240), calculate_harmonies(base_genesis, 240, val_mod=0.7)]
 elif harmony_rule == "Complementary":
-    palette = [calculate_harmonies(base_genesis, 0, val_mod=0.5), calculate_harmonies(base_genesis, 0, val_mod=0.8), base_genesis, calculate_harmonies(base_genesis, 180), calculate_harmonies(base_genesis, 180, val_mod=0.6)]
+    palette = [calculate_harmonies(base_genesis, 0, val_mod=0.5), base_genesis, calculate_harmonies(base_genesis, 180), calculate_harmonies(base_genesis, 180, val_mod=0.6)]
 elif harmony_rule == "Split Complementary":
     palette = [calculate_harmonies(base_genesis, -150), calculate_harmonies(base_genesis, -30), base_genesis, calculate_harmonies(base_genesis, 150), calculate_harmonies(base_genesis, 180)]
 elif harmony_rule == "Square":
@@ -253,15 +257,16 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
+                # NATIVE RESOLUTION: Defined move_cols clearly before call injection to kill NameError bugs
                 move_cols = st.columns(2)
-                with move_cols:
+                with move_cols[0]:
                     if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
                                 st.session_state.custom_palette[s_idx] = color
                                 break
                         st.rerun()
-                with move_cols:
+                with move_cols[1]:
                     if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
                         st.session_state.active_ramp_source = color
                         st.rerun()
@@ -283,7 +288,7 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                c_sub_l, c_sub_m, c_sub_r = st.columns()
+                c_sub_l, c_sub_m, c_sub_r = st.columns([0.5, 2.0, 0.5])
                 with c_sub_m:
                     if st.button("+", key=f"add_ramp_cell_{r_idx}_{r_hex.replace('#','')}"):
                         for s_idx in range(16):
@@ -308,8 +313,8 @@ for i in range(16):
         slot_data = st.session_state.custom_palette[i]
         if slot_data is not None:
             with st.container():
-                r_s, g_s, b_sl = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
-                slot_hex = f"#{r_s:02X}{g_s:02X}{b_sl:02X}"
+                r_s, g_s, b_s = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
+                slot_hex = f"#{r_s:02X}{g_s:02X}{b_s:02X}"
                 st.markdown(f"""<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;"><div style="width:40px; height:44px; background-color:{slot_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.2); margin-bottom:4px;"></div><code>{rgb_to_sgdk_hex(slot_data)}</code></div>""", unsafe_allow_html=True)
                 move_left, clear_cell, move_right = st.columns(3)
                 with move_left:
@@ -360,7 +365,7 @@ if [c for c in st.session_state.custom_palette if c is not None]:
     with tab_raw:
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
-            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
+            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1], c[2]})")
 
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
