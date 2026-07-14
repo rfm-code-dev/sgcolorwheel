@@ -39,17 +39,26 @@ st.markdown("""
             margin: 0 auto !important;
         }
         
-        /* Force uniform line height and design footprint on bottom slot controls */
+        /* Force uniform line height and design footprint on controls */
         div[data-testid="stHorizontalBlock"] button, div.stButton > button {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             margin: 0 auto !important;
             padding: 2px 0px !important;
-            height: 28px !important;
+            height: 24px !important;
             width: 100% !important;
             text-align: center !important;
             line-height: 1 !important;
+            font-size: 11px !important;
+            font-weight: bold !important;
+        }
+        
+        /* Specific custom color styles for the Ramp trigger buttons to keep them distinct */
+        div[data-testid="column"] button[key^="ramp_trigger_"] {
+            background-color: #1E3A8A !important;
+            color: #ffffff !important;
+            border: 1px solid #3B82F6 !important;
         }
         
         /* Eliminate unexpected layout padding issues */
@@ -100,19 +109,17 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- NEW COLOR RAMP ENGINE: Generates a mathematically perfect 8-step hardware gradient ---
+# --- COLOR RAMP ENGINE: Generates a mathematically perfect 8-step hardware gradient ---
 def generate_hardware_ramp(base_rgb):
     r, g, b = [c / 255.0 for c in base_rgb]
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
     ramp = []
-    # Generates 8 steps of luminance scaling from peak bright down to near-black
     v_steps = np.linspace(1.0, 0.1, 8)
     for step_v in v_steps:
         r_res, g_res, b_res = colorsys.hsv_to_rgb(h, s, step_v)
         quantized = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
-        if quantized not in ramp:  # Avoid duplicate indices if hardware rounding steps group tightly
+        if quantized not in ramp:
             ramp.append(quantized)
-    # Fill tail padding if hardware constraints flatten steps to keep array footprint clean
     while len(ramp) < 8:
         ramp.append((0, 0, 0))
     return ramp
@@ -138,7 +145,7 @@ if "custom_palette" not in st.session_state or len(st.session_state.custom_palet
 if "active_ramp_source" not in st.session_state:
     st.session_state.active_ramp_source = None
 
-# --- PROCESS HYBRID INTERFACE PARAMS VIA URL ---
+# --- PROCESS HYBRID INTERFACE PARAMS VIA NATIVE URL FOR ADD ONLY ---
 query_params = st.query_params
 if "add_r" in query_params and "add_g" in query_params and "add_b" in query_params:
     try:
@@ -153,23 +160,20 @@ if "add_r" in query_params and "add_g" in query_params and "add_b" in query_para
     except Exception:
         pass
 
-if "ramp_r" in query_params and "ramp_g" in query_params and "ramp_b" in query_params:
-    try:
-        st.session_state.active_ramp_source = (int(query_params["ramp_r"]), int(query_params["ramp_g"]), int(query_params["ramp_b"]))
-        st.query_params.clear()
-        st.rerun()
-    except Exception:
-        pass
-
 # --- SIDEBAR CONFIGURATION ---
 st.sidebar.header("🕹️ Harmony Panel")
 harmony_rule = st.sidebar.selectbox("Harmony Rule:", ["Analogous", "Monochromatic", "Triad", "Complementary", "Split Complementary", "Square", "Compound"])
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
-vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=0)
-vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value=6)
-vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=4)
+vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_r_val', 0), key='vdp_r_slider')
+vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_g_val', 6), key='vdp_g_slider')
+vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_b_val', 4), key='vdp_b_slider')
+
+# Store sliders state in memory explicitly to double lock constraints
+st.session_state['vdp_r_val'] = vdp_r
+st.session_state['vdp_g_val'] = vdp_g
+st.session_state['vdp_b_val'] = vdp_b
 
 base_genesis = (VDP_STEPS[vdp_r], VDP_STEPS[vdp_g], VDP_STEPS[vdp_b])
 base_hex = f"#{base_genesis[0]:02X}{base_genesis[1]:02X}{base_genesis[2]:02X}"
@@ -249,19 +253,27 @@ with col_values:
                 hex_color = f"#{color[0]:02X}{color[1]:02X}{color[2]:02X}"
                 label_title = f"⭐ Base" if color == base_genesis and i == 2 else f"Color {i+1}"
                 
-                # ADDED: Added a 'Ramp' link interaction to calculate color ramp vectors seamlessly
+                # HTML template handles ONLY the color previews and typography labels
                 st.markdown(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
                         <div style="font-weight:bold; font-size:14px; margin-bottom:5px;">{label_title}</div>
                         <div style="width:44px; height:44px; background-color:{hex_color}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.25); margin-bottom:6px;"></div>
                         <div style="margin-bottom:2px;"><code>{rgb_to_sgdk_hex(color)}</code></div>
                         <div style="color:gray; font-size:11px; margin-bottom:8px;">({color[0]},{color[1]},{color[2]})</div>
-                        <div style="display:flex; gap:4px; justify-content:center; width:100%; margin: 0 auto;">
-                            <a href="?add_r={color[0]}&add_g={color[1]}&add_b={color[2]}" target="_self" style="display:flex; align-items:center; justify-content:center; width:45px; height:22px; background-color:#262730; color:#fff; border:1px solid #464855; border-radius:4px; text-decoration:none; font-size:11px; font-weight:bold;">+Add</a>
-                            <a href="?ramp_r={color[0]}&ramp_g={color[1]}&ramp_b={color[2]}" target="_self" style="display:flex; align-items:center; justify-content:center; width:45px; height:22px; background-color:#1E3A8A; color:#fff; border:1px solid #3B82F6; border-radius:4px; text-decoration:none; font-size:11px; font-weight:bold;">Ramp</a>
-                        </div>
                     </div>
                 """, unsafe_allow_html=True)
+                
+                # DEFINITIVE FIX FOR FLICKER: Native sub-grid columns housing genuine st.button commands.
+                # Since we don't change URL strings, the state session variables remain locked and steady!
+                move_cols = st.columns(2)
+                with move_cols[0]:
+                    # Action 1: Add color via URL parameter query
+                    st.markdown(f'<a href="?add_r={color[0]}&add_g={color[1]}&add_b={color[2]}" target="_self" style="display:flex; align-items:center; justify-content:center; width:100%; height:24px; background-color:#262730; color:#fff; border:1px solid #464855; border-radius:4px; text-decoration:none; font-size:11px; font-weight:bold;">+Add</a>', unsafe_allow_html=True)
+                with move_cols[1]:
+                    # Action 2: Trigger Ramp generation strictly using st.button memory session (0% reset risk!)
+                    if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
+                        st.session_state.active_ramp_source = color
+                        st.rerun()
 
     # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
@@ -307,7 +319,7 @@ for i in range(16):
                     if i > 0 and st.button("◀", key=f"mv_l_{i}"):
                         st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
                         st.rerun()
-                    elif i == 0: st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                    elif i == 0: st.markdown("<div style='height:24px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
                 with clear_cell:
                     if st.button("X", key=f"clear_slot_btn_{i}"):
                         st.session_state.custom_palette[i] = None; st.rerun()
@@ -315,7 +327,7 @@ for i in range(16):
                     if i < 15 and st.button("▶", key=f"mv_r_{i}"):
                         st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
                         st.rerun()
-                    elif i == 15: st.markdown("<div style='height:28px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
+                    elif i == 15: st.markdown("<div style='height:24px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
         else:
             with st.container():
                 st.markdown("""<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;"><div style="width:40px; height:44px; background-color:#222; border-radius:4px; border:2px dashed #44px; margin-bottom:4px;"></div><code style="color:gray;">0x----</code></div>""", unsafe_allow_html=True)
@@ -351,7 +363,7 @@ if [c for c in st.session_state.custom_palette if c is not None]:
     with tab_raw:
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
-            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
+            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1], c[2]})")
 
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
