@@ -109,25 +109,12 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- COLOR RAMP ENGINE: Generates a mathematically perfect 8-step hardware gradient ---
-def generate_hardware_ramp(base_rgb):
-    r, g, b = [c / 255.0 for c in base_rgb]
-    h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    ramp = []
-    v_steps = np.linspace(1.0, 0.1, 8)
-    for step_v in v_steps:
-        r_res, g_res, b_res = colorsys.hsv_to_rgb(h, s, step_v)
-        quantized = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
-        if quantized not in ramp:
-            ramp.append(quantized)
-    while len(ramp) < 8:
-        ramp.append((0, 0, 0))
-    return ramp
-
+# --- FIXED ULTRA PERFORMANCE ENGINE: Pre-calculating arrays into single memory blocks ---
 @st.cache_data
 def get_cached_precomputed_wheel(brightness_val):
     angles = np.linspace(0, 2 * np.pi, 64, endpoint=False)
     radii = np.linspace(0.08, 1.0, 10)
+    
     a_list, r_list, c_list = [], [], []
     for a in angles:
         for r_g in radii:
@@ -136,6 +123,7 @@ def get_cached_precomputed_wheel(brightness_val):
             a_list.append(a)
             r_list.append(r_g)
             c_list.append(f"#{q_r:02X}{q_g:02X}{q_b:02X}")
+            
     return np.array(a_list), np.array(r_list), c_list
 
 
@@ -257,16 +245,15 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # NATIVE RESOLUTION: Defined move_cols clearly before call injection to kill NameError bugs
                 move_cols = st.columns(2)
-                with move_cols[0]:
+                with move_cols:
                     if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
                                 st.session_state.custom_palette[s_idx] = color
                                 break
                         st.rerun()
-                with move_cols[1]:
+                with move_cols:
                     if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
                         st.session_state.active_ramp_source = color
                         st.rerun()
@@ -298,10 +285,14 @@ with col_values:
                         st.rerun()
                             
     st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-    if not any(c is not None for c in st.session_state.custom_palette):
+    
+    # SILENT INTERFACE OPTIMIZATION: Banners only show up at 0 slots or at exact 16 complete limit.
+    # From 1 to 15 slots, no message box spans on the canvas to protect workspace clean layout.
+    filled_count = len([c for c in st.session_state.custom_palette if c is not None])
+    if filled_count == 0:
         st.info("💡 Add individual colors via **+Add**, or hit **Ramp** to calculate light/shadow structures automatically.")
-    else:
-        st.success("💡 Palette workspace populated! Organize or clear items below.")
+    elif filled_count == 16:
+        st.success("🎉 Hardware block completed! All 16 slots populated and locked for asset compilation.")
 
 # --- 16-COLOR PALETTE BUILDER WORKSPACE ---
 st.markdown("---")
@@ -365,7 +356,7 @@ if [c for c in st.session_state.custom_palette if c is not None]:
     with tab_raw:
         st.text("Raw RGB Tuple List Layout:")
         for idx, c in enumerate(st.session_state.custom_palette):
-            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1], c[2]})")
+            if c is not None: st.text(f"Slot {idx}: ({c[0]}, {c[1]}, {c[2]})")
 
 # --- FOOTER ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
