@@ -122,20 +122,22 @@ def calculate_harmonies(base_rgb, angle, sat_mod=1.0, val_mod=1.0):
     r_res, g_res, b_res = colorsys.hsv_to_rgb(h_new, s_new, v_new)
     return quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
 
-# --- ULTRA PERFORMANCE FIX: CACHING THE CORE HARDWARE DOT MATRIX ---
-# This function calculates the grid structure and caches it based on brightness.
-# If brightness hasn't changed, the double loop is entirely skipped, maximizing speed!
+# --- FIXED ULTRA PERFORMANCE ENGINE: Pre-calculating arrays into single memory blocks ---
 @st.cache_data
-def generate_cached_wheel_matrix(brightness_val):
+def get_cached_precomputed_wheel(brightness_val):
     angles = np.linspace(0, 2 * np.pi, 64, endpoint=False)
     radii = np.linspace(0.08, 1.0, 10)
-    matrix_data = []
+    
+    a_list, r_list, c_list = [], [], []
     for a in angles:
         for r_g in radii:
             r_res, g_res, b_res = colorsys.hsv_to_rgb(a / (2 * np.pi), r_g, max(0.0, brightness_val))
             q_r, q_g, q_b = quantize_to_genesis((int(r_res * 255), int(g_res * 255), int(b_res * 255)))
-            matrix_data.append((a, r_g, f"#{q_r:02X}{q_g:02X}{q_b:02X}"))
-    return matrix_data
+            a_list.append(a)
+            r_list.append(r_g)
+            c_list.append(f"#{q_r:02X}{q_g:02X}{q_b:02X}")
+            
+    return np.array(a_list), np.array(r_list), c_list
 
 
 # --- INITIALIZE PALETTE ARRAY SLOTS AS FIXED 16 ELEMENT LIST ---
@@ -211,16 +213,19 @@ _, _, dynamic_value = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
 # --- HARMONY RULE LOGIC ---
 palette = []
 if harmony_rule == "Analogous":
-    palette = [
-        calculate_harmonies(base_genesis, -60),
-        calculate_harmonies(base_genesis, -30),
-        base_genesis,
-        calculate_harmonies(base_genesis, 30),
-        calculate_harmonies(base_genesis, 60)
-    ]
-# ... [rest of harmony logic remains identical to compress length safely]
-else:
-    palette = [calculate_harmonies(base_genesis, 0, val_mod=0.5), base_genesis, calculate_harmonies(base_genesis, 180)]
+    palette = [calculate_harmonies(base_genesis, -60), calculate_harmonies(base_genesis, -30), base_genesis, calculate_harmonies(base_genesis, 30), calculate_harmonies(base_genesis, 60)]
+elif harmony_rule == "Monochromatic":
+    palette = [calculate_harmonies(base_genesis, 0, sat_mod=0.2, val_mod=0.4), calculate_harmonies(base_genesis, 0, sat_mod=0.5, val_mod=0.7), base_genesis, calculate_harmonies(base_genesis, 0, sat_mod=0.8, val_mod=0.9), calculate_harmonies(base_genesis, 0, sat_mod=0.6, val_mod=1.2)]
+elif harmony_rule == "Triad":
+    palette = [calculate_harmonies(base_genesis, 0, val_mod=0.6), base_genesis, calculate_harmonies(base_genesis, 120), calculate_harmonies(base_genesis, 240), calculate_harmonies(base_genesis, 240, val_mod=0.7)]
+elif harmony_rule == "Complementary":
+    palette = [calculate_harmonies(base_genesis, 0, val_mod=0.5), calculate_harmonies(base_genesis, 0, val_mod=0.8), base_genesis, calculate_harmonies(base_genesis, 180), calculate_harmonies(base_genesis, 180, val_mod=0.6)]
+elif harmony_rule == "Split Complementary":
+    palette = [calculate_harmonies(base_genesis, -150), calculate_harmonies(base_genesis, -30), base_genesis, calculate_harmonies(base_genesis, 150), calculate_harmonies(base_genesis, 180)]
+elif harmony_rule == "Square":
+    palette = [base_genesis, calculate_harmonies(base_genesis, 90), calculate_harmonies(base_genesis, 180), calculate_harmonies(base_genesis, 270), calculate_harmonies(base_genesis, 270, val_mod=0.6)]
+elif harmony_rule == "Compound":
+    palette = [calculate_harmonies(base_genesis, -30, sat_mod=0.6), calculate_harmonies(base_genesis, 30, val_mod=0.8), base_genesis, calculate_harmonies(base_genesis, 180, sat_mod=0.4), calculate_harmonies(base_genesis, 180)]
 
 # --- MAIN INTERFACE LAYOUT ---
 col_wheel, col_values = st.columns([0.8, 1.4])
@@ -228,13 +233,13 @@ col_wheel, col_values = st.columns([0.8, 1.4])
 with col_wheel:
     st.write("### VDP 9-bit Color Wheel")
     fig, ax = plt.subplots(figsize=(3.2, 3.2), subplot_kw=dict(projection='polar'))
+    
     ax.set_autoscale_on(False)
     ax.set_rmax(1.12)
     
-    # SPEED OPTIMIZATION TRIGGER: Grabbing cached rendering background instantly from RAM!
-    cached_dots = generate_cached_wheel_matrix(dynamic_value)
-    for dot in cached_dots:
-        ax.scatter(dot[0], dot[1], color=dot[2], s=15, alpha=0.9, linewidths=0, zorder=1)
+    # ⚡ VETORIAL INJECTION: Draws 640 dots in ONE single microsecond operation instead of a heavy loop!
+    bg_a, bg_r, bg_c = get_cached_precomputed_wheel(dynamic_value)
+    ax.scatter(bg_a, bg_r, color=bg_c, s=15, alpha=0.9, linewidths=0, zorder=1)
             
     for idx, color in enumerate(palette):
         r_v, g_v, b_v = int(color[0]), int(color[1]), int(color[2])
@@ -252,14 +257,19 @@ with col_wheel:
     ax.grid(False)
     fig.patch.set_facecolor('none')
     ax.set_facecolor('none')
+    
+    # Render graphic canvas
     st.pyplot(fig)
+    
+    # 🛑 MEMORY LEAK FIX: Force closes the active plot immediately to clear server cache.
+    # This prevents the dots from compounding over time and fixes the giant-circle bug!
+    plt.close(fig)
 
 
 with col_values:
     st.write("### Calculated Harmonies")
     cols_palette = st.columns(5)
     
-    # Make sure we don't crash if palette has fewer than 5 items due to brevity fallback
     display_count = min(len(palette), 5)
     for i in range(display_count):
         color = palette[i]
@@ -267,7 +277,7 @@ with col_values:
             with st.container():
                 r_c, g_c, b_c = int(color[0]), int(color[1]), int(color[2])
                 hex_color = f"#{r_c:02X}{g_c:02X}{b_c:02X}"
-                label_title = f"⭐ Base" if color == base_genesis and i == 1 else f"Color {i+1}"
+                label_title = f"⭐ Base" if color == base_genesis and i == 2 else f"Color {i+1}"
                 
                 st.markdown(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
@@ -278,9 +288,9 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                col_btn_l, col_btn_mid, col_btn_r = st.columns([1, 2, 1])
+                col_btn_l, col_btn_mid, col_btn_r = st.columns(3)
                 with col_btn_mid:
-                    if st.button("➕ Add", key=f"add_btn_{i}_{hex_color.replace('#', '')}"):
+                    if st.button("➕", key=f"add_btn_{i}_{hex_color.replace('#', '')}"):
                         inserted = False
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
@@ -294,7 +304,7 @@ with col_values:
 
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
     if not any(c is not None for c in st.session_state.custom_palette):
-        st.info("💡 Add colors using the **➕ Add** buttons above to populate your 16-color workspace and unlock the export generator panel below.")
+        st.info("💡 Add colors using the **➕** buttons above to populate your 16-color workspace and unlock the export generator panel below.")
     else:
         st.success("💡 Colors added successfully! Organize your sequence below using the arrow controls.")
 
