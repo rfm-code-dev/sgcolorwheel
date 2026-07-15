@@ -9,7 +9,7 @@ st.set_page_config(page_title="Sega Genesis / Mega Drive Color Wheel", page_icon
 st.title("🎮 Sega Genesis / Mega Drive Color Wheel")
 st.markdown("Create and calculate color harmonies locked strictly to the **512 colors (9-bit VDP RGB)** of the original hardware.")
 
-# --- INJECT CUSTOM CSS FOR RGB SLIDERS AND PERFECT ALIGNMENT ---
+# --- INJECT CUSTOM CSS FOR EXCLUSIVE SLIDER TARGETING (RED, GREEN, BLUE) ---
 st.markdown("""
     <style>
         /* Disable mouse selection events on disabled/preview color picks */
@@ -61,29 +61,28 @@ st.markdown("""
             border: 1px solid #3B82F6 !important;
         }
         
-        /* --- HIGH recall DEFINITIVE TARGET FOR STREAMLIT MODERN RGB SLIDERS --- */
-        /* Red Slider Track & Thumb */
-        div[data-st-key="vdp_r_container"] div[data-testid="stSliderTrack"] > div > div,
-        div[data-st-key="vdp_r_container"] div[role="slider"],
-        div[data-st-key="vdp_r_container"] .stSlider [data-testid="stSliderTrack"] > div {
+        /* --- DEFINITIVE FIX FOR RGB SLIDERS INDIVIDUAL COLORING --- */
+        /* Targets the parent div containing the specific slider key element to isolate styles completely */
+        
+        /* RED SLIDER CONTROL SECTION */
+        div:has(> div > div > div > input[aria-label="Red Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
+        div:has(> div > div > div > input[aria-label="Red Channel (VDP)"]) div[role="slider"] {
             background: #FF3333 !important;
             background-color: #FF3333 !important;
             border-color: #FF3333 !important;
         }
 
-        /* Green Slider Track & Thumb */
-        div[data-st-key="vdp_g_container"] div[data-testid="stSliderTrack"] > div > div,
-        div[data-st-key="vdp_g_container"] div[role="slider"],
-        div[data-st-key="vdp_g_container"] .stSlider [data-testid="stSliderTrack"] > div {
+        /* GREEN SLIDER CONTROL SECTION */
+        div:has(> div > div > div > input[aria-label="Green Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
+        div:has(> div > div > div > input[aria-label="Green Channel (VDP)"]) div[role="slider"] {
             background: #33CC33 !important;
             background-color: #33CC33 !important;
             border-color: #33CC33 !important;
         }
 
-        /* Blue Slider Track & Thumb */
-        div[data-st-key="vdp_b_container"] div[data-testid="stSliderTrack"] > div > div,
-        div[data-st-key="vdp_b_container"] div[role="slider"],
-        div[data-st-key="vdp_b_container"] .stSlider [data-testid="stSliderTrack"] > div {
+        /* BLUE SLIDER CONTROL SECTION */
+        div:has(> div > div > div > input[aria-label="Blue Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
+        div:has(> div > div > div > input[aria-label="Blue Channel (VDP)"]) div[role="slider"] {
             background: #3366FF !important;
             background-color: #3366FF !important;
             border-color: #3366FF !important;
@@ -178,18 +177,15 @@ harmony_rule = st.sidebar.selectbox("Harmony Rule:", ["Analogous", "Monochromati
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
-# HTML wrappers dynamically encapsulate each slider area so the CSS engine can override the styles cleanly
-st.sidebar.markdown("<div data-st-key='vdp_r_container'>", unsafe_allow_html=True)
+# Cleaned up the HTML divs to let the aria-label CSS match native nodes perfectly
 vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_r_val', 0), key='vdp_r_slider')
-st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_r}</div></div>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_r}</div>", unsafe_allow_html=True)
 
-st.sidebar.markdown("<div data-st-key='vdp_g_container'>", unsafe_allow_html=True)
 vdp_g = st.sidebar.slider("Green Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_g_val', 6), key='vdp_g_slider')
-st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_g}</div></div>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_g}</div>", unsafe_allow_html=True)
 
-st.sidebar.markdown("<div data-st-key='vdp_b_container'>", unsafe_allow_html=True)
 vdp_b = st.sidebar.slider("Blue Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_b_val', 4), key='vdp_b_slider')
-st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:15px;'>Value: {vdp_b}</div></div>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:15px;'>Value: {vdp_b}</div>", unsafe_allow_html=True)
 
 st.session_state['vdp_r_val'] = vdp_r
 st.session_state['vdp_g_val'] = vdp_g
@@ -286,19 +282,18 @@ with col_values:
                 """, unsafe_allow_html=True)
                 
                 move_cols = st.columns(2)
-                with move_cols[0]:
+                with move_cols:
                     if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
                                 st.session_state.custom_palette[s_idx] = color
                                 break
                         st.rerun()
-                with move_cols[1]:
+                with move_cols:
                     if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
                         st.session_state.active_ramp_source = color
                         st.rerun()
 
-    # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
     if isinstance(st.session_state.active_ramp_source, tuple) and len(st.session_state.active_ramp_source) == 3:
         st.write("#### ⚡ Generated 8-Step Hardware Color Ramp")
@@ -328,7 +323,7 @@ with col_values:
     
     filled_count = len([c for c in st.session_state.custom_palette if c is not None])
     if filled_count == 0:
-        st.info("💡 Add individual colors via **+Add**, or hit **Ramp** to calculate light/shadow structures automatically.")
+        st.info("💡 Add individual colors via **+Add**, or hit **+** inside a Ramp gradient to populate your active indices workspace.")
     elif filled_count == 16:
         st.success("🎉 Hardware block completed! All 16 slots populated and locked for asset compilation.")
 
