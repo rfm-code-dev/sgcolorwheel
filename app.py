@@ -62,9 +62,6 @@ st.markdown("""
         }
         
         /* --- DEFINITIVE FIX FOR RGB SLIDERS INDIVIDUAL COLORING --- */
-        /* Targets the parent div containing the specific slider key element to isolate styles completely */
-        
-        /* RED SLIDER CONTROL SECTION */
         div:has(> div > div > div > input[aria-label="Red Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
         div:has(> div > div > div > input[aria-label="Red Channel (VDP)"]) div[role="slider"] {
             background: #FF3333 !important;
@@ -72,7 +69,6 @@ st.markdown("""
             border-color: #FF3333 !important;
         }
 
-        /* GREEN SLIDER CONTROL SECTION */
         div:has(> div > div > div > input[aria-label="Green Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
         div:has(> div > div > div > input[aria-label="Green Channel (VDP)"]) div[role="slider"] {
             background: #33CC33 !important;
@@ -80,7 +76,6 @@ st.markdown("""
             border-color: #33CC33 !important;
         }
 
-        /* BLUE SLIDER CONTROL SECTION */
         div:has(> div > div > div > input[aria-label="Blue Channel (VDP)"]) div[data-testid="stSliderTrack"] > div > div,
         div:has(> div > div > div > input[aria-label="Blue Channel (VDP)"]) div[role="slider"] {
             background: #3366FF !important;
@@ -177,7 +172,6 @@ harmony_rule = st.sidebar.selectbox("Harmony Rule:", ["Analogous", "Monochromati
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
-# Cleaned up the HTML divs to let the aria-label CSS match native nodes perfectly
 vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_r_val', 0), key='vdp_r_slider')
 st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_r}</div>", unsafe_allow_html=True)
 
@@ -281,19 +275,21 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
+                # TOTAL LOCK PROPRIETARIAN FIX: Index pointer array bounds maps smoothly inside layout
                 move_cols = st.columns(2)
-                with move_cols:
+                with move_cols[0]:
                     if st.button("+Add", key=f"add_native_{i}_{hex_color.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
                                 st.session_state.custom_palette[s_idx] = color
                                 break
                         st.rerun()
-                with move_cols:
+                with move_cols[1]:
                     if st.button("Ramp", key=f"ramp_trigger_{i}_{hex_color.replace('#','')}"):
                         st.session_state.active_ramp_source = color
                         st.rerun()
 
+    # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
     if isinstance(st.session_state.active_ramp_source, tuple) and len(st.session_state.active_ramp_source) == 3:
         st.write("#### ⚡ Generated 8-Step Hardware Color Ramp")
@@ -310,8 +306,9 @@ with col_values:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                c_sub_l, c_sub_m, c_sub_r = st.columns([0.5, 2.0, 0.5])
-                with c_sub_m:
+                # DEFINITIVE ENCAPSULATION FIX: Direct index access [1] prevents variable namespace bleed on the block
+                c_sub_grid = st.columns([0.5, 2.0, 0.5])
+                with c_sub_grid[1]:
                     if st.button("+", key=f"add_ramp_cell_{r_idx}_{r_hex.replace('#','')}"):
                         for s_idx in range(16):
                             if st.session_state.custom_palette[s_idx] is None:
@@ -340,16 +337,17 @@ for i in range(16):
                 r_s, g_s, b_s = int(slot_data[0]), int(slot_data[1]), int(slot_data[2])
                 slot_hex = f"#{r_s:02X}{g_s:02X}{b_s:02X}"
                 st.markdown(f"""<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:5px;"><div style="width:40px; height:44px; background-color:{slot_hex}; border-radius:4px; border:2px solid #555; box-shadow:0px 2px 4px rgba(0,0,0,0.2); margin-bottom:4px;"></div><code>{rgb_to_sgdk_hex(slot_data)}</code></div>""", unsafe_allow_html=True)
-                move_left, clear_cell, move_right = st.columns(3)
-                with move_left:
+                
+                control_cols = st.columns(3)
+                with control_cols[0]:
                     if i > 0 and st.button("◀", key=f"mv_l_{i}"):
                         st.session_state.custom_palette[i-1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i-1]
                         st.rerun()
                     elif i == 0: st.markdown("<div style='height:24px; width:100%; visibility:hidden;'></div>", unsafe_allow_html=True)
-                with clear_cell:
+                with control_cols[1]:
                     if st.button("X", key=f"clear_slot_btn_{i}"):
                         st.session_state.custom_palette[i] = None; st.rerun()
-                with move_right:
+                with control_cols[2]:
                     if i < 15 and st.button("▶", key=f"mv_r_{i}"):
                         st.session_state.custom_palette[i+1], st.session_state.custom_palette[i] = st.session_state.custom_palette[i], st.session_state.custom_palette[i+1]
                         st.rerun()
