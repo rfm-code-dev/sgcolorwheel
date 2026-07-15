@@ -61,32 +61,32 @@ st.markdown("""
             border: 1px solid #3B82F6 !important;
         }
         
-        /* --- NEW: CUSTOM RGB SIDEBAR SLIDERS COLORS --- */
-        /* Red Slider Customization */
-        div[data-testid="stSidebar"] div[data-st-key="vdp_r_container"] div[role="slider"] {
+        /* --- HIGH recall DEFINITIVE TARGET FOR STREAMLIT MODERN RGB SLIDERS --- */
+        /* Red Slider Track & Thumb */
+        div[data-st-key="vdp_r_container"] div[data-testid="stSliderTrack"] > div > div,
+        div[data-st-key="vdp_r_container"] div[role="slider"],
+        div[data-st-key="vdp_r_container"] .stSlider [data-testid="stSliderTrack"] > div {
+            background: #FF3333 !important;
             background-color: #FF3333 !important;
             border-color: #FF3333 !important;
         }
-        div[data-testid="stSidebar"] div[data-st-key="vdp_r_container"] div[data-testid="stSliderTrack"] > div div {
-            background-color: #FF3333 !important;
-        }
 
-        /* Green Slider Customization */
-        div[data-testid="stSidebar"] div[data-st-key="vdp_g_container"] div[role="slider"] {
+        /* Green Slider Track & Thumb */
+        div[data-st-key="vdp_g_container"] div[data-testid="stSliderTrack"] > div > div,
+        div[data-st-key="vdp_g_container"] div[role="slider"],
+        div[data-st-key="vdp_g_container"] .stSlider [data-testid="stSliderTrack"] > div {
+            background: #33CC33 !important;
             background-color: #33CC33 !important;
             border-color: #33CC33 !important;
         }
-        div[data-testid="stSidebar"] div[data-st-key="vdp_g_container"] div[data-testid="stSliderTrack"] > div div {
-            background-color: #33CC33 !important;
-        }
 
-        /* Blue Slider Customization */
-        div[data-testid="stSidebar"] div[data-st-key="vdp_b_container"] div[role="slider"] {
+        /* Blue Slider Track & Thumb */
+        div[data-st-key="vdp_b_container"] div[data-testid="stSliderTrack"] > div > div,
+        div[data-st-key="vdp_b_container"] div[role="slider"],
+        div[data-st-key="vdp_b_container"] .stSlider [data-testid="stSliderTrack"] > div {
+            background: #3366FF !important;
             background-color: #3366FF !important;
             border-color: #3366FF !important;
-        }
-        div[data-testid="stSidebar"] div[data-st-key="vdp_b_container"] div[data-testid="stSliderTrack"] > div div {
-            background-color: #3366FF !important;
         }
         
         /* Eliminate unexpected layout padding issues */
@@ -178,7 +178,7 @@ harmony_rule = st.sidebar.selectbox("Harmony Rule:", ["Analogous", "Monochromati
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔌 Native VDP Color Picker")
 
-# HTML wrappers dynamically identify each slider area so the CSS engine can inject the RGB colors accurately
+# HTML wrappers dynamically encapsulate each slider area so the CSS engine can override the styles cleanly
 st.sidebar.markdown("<div data-st-key='vdp_r_container'>", unsafe_allow_html=True)
 vdp_r = st.sidebar.slider("Red Channel (VDP)", min_value=0, max_value=7, value=st.session_state.get('vdp_r_val', 0), key='vdp_r_slider')
 st.sidebar.markdown(f"<div style='margin-top:-10px; margin-bottom:10px;'>Value: {vdp_r}</div></div>", unsafe_allow_html=True)
@@ -298,8 +298,9 @@ with col_values:
                         st.session_state.active_ramp_source = color
                         st.rerun()
 
+    # RENDER COLOR RAMP PANELS INTERACTIVELY RIGHT BENEATH HARMONIES
     st.markdown("<div style='height:15px;'></div>", unsafe_allow_html=True)
-    if st.session_state.active_ramp_source:
+    if isinstance(st.session_state.active_ramp_source, tuple) and len(st.session_state.active_ramp_source) == 3:
         st.write("#### ⚡ Generated 8-Step Hardware Color Ramp")
         active_ramp = generate_hardware_ramp(st.session_state.active_ramp_source)
         ramp_cols = st.columns(8)
